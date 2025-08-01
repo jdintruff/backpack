@@ -35,22 +35,33 @@ get_hostname_color() {
     done
 }
 
+# Get git branch if in a git repo
+get_git_branch() {
+    if which git >/dev/null 2>&1 && [ -d .git ] || git rev-parse --git-dir >/dev/null 2>&1; then
+        branch=$(git symbolic-ref --short HEAD 2>/dev/null || git rev-parse --short HEAD 2>/dev/null)
+        if [ -n "$branch" ]; then
+            echo " ($branch)"
+        fi
+    fi
+}
+
 # Get the color for current hostname
 HOSTNAME_COLOR=$(get_hostname_color "$(hostname)")
 
 # For sh shells, we need to export PS1
 if [ -z "$BASH_VERSION" ]; then
     # For sh, we need to use single quotes and export
-    export PS1='${USER}@$(hostname):${PWD}$ '
+    export PS1='${USER}@$(hostname):${PWD}$(get_git_branch)$ '
     # Try to add colors if the shell supports it
-    export PS1=$(printf '\033[32m${USER}\033[96m@\033[1;%sm$(hostname)\033[96m:\033[31m${PWD}\033[0m$ ' "$HOSTNAME_COLOR")
+    export PS1=$(printf '\033[32m${USER}\033[96m@\033[1;%sm$(hostname)\033[96m:\033[31m${PWD}\033[93m$(get_git_branch)\033[0m$ ' "$HOSTNAME_COLOR")
 else
-    PS1="\[\033[32m\]\u\[\033[96m\]@\[\033[1;${HOSTNAME_COLOR}m\]\h\[\033[96m\]:\[\033[31m\]\w\[\033[0m\]\$ "
+    # For bash, we can use PROMPT_COMMAND to update git branch dynamically
+    PROMPT_COMMAND='PS1="\[\033[32m\]\u\[\033[96m\]@\[\033[1;${HOSTNAME_COLOR}m\]\h\[\033[96m\]:\[\033[31m\]\w\[\033[93m\]$(get_git_branch)\[\033[0m\]\$ "'
     
     # If we're in an xterm, set the title too
     case "$TERM" in
     xterm*|rxvt*)
-        PS1="\[\e]0;\u@\h: \w\a\]$PS1"
+        PROMPT_COMMAND='PS1="\[\e]0;\u@\h: \w\a\]\[\033[32m\]\u\[\033[96m\]@\[\033[1;${HOSTNAME_COLOR}m\]\h\[\033[96m\]:\[\033[31m\]\w\[\033[93m\]$(get_git_branch)\[\033[0m\]\$ "'
         ;;
     esac
     
