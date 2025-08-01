@@ -8,15 +8,19 @@ if [ -z "$BACKPACK" ]; then
 	}
 	RC="$(encode < ~/.backpack)"
 	FUNCTION="$(encode <<EOF
-backpack() (
+backpack() {
 	$(cat "$(realpath "$0")")
-)
+}
+export -f backpack 2>/dev/null || true
 EOF
 )"
 	BACKPACK="$(encode <<EOF
 extract_backpack() {
-	exec "\$BASH" --rcfile <(
-		cat <<'EOF_2'
+	# Always use temporary file approach for maximum compatibility
+	TMPRC=\$(mktemp /tmp/backpack.XXXXXX)
+	
+	# Write startup files
+	cat > "\$TMPRC" <<'EOF_2'
 [ -f /etc/profile ] && . /etc/profile
 for f in ~/.bash_profile ~/.bash_login ~/.profile; do
 	if [ -f "\$f" ]; then
@@ -25,22 +29,51 @@ for f in ~/.bash_profile ~/.bash_login ~/.profile; do
 	fi
 done
 EOF_2
-		decode "$FUNCTION"
-		decode "$RC"
-	) -i;
+	decode "$FUNCTION" >> "\$TMPRC"
+	decode "$RC" >> "\$TMPRC"
+	
+	# Also ensure ssh is wrapped for next hop
+	echo 'ssh() {' >> "\$TMPRC"
+	echo '    if [ -n "\$BACKPACK" ] && which base64 >/dev/null 2>&1 && type backpack >/dev/null 2>&1; then' >> "\$TMPRC"
+	echo '        backpack "\$@"' >> "\$TMPRC"
+	echo '    else' >> "\$TMPRC"
+	echo '        command ssh "\$@"' >> "\$TMPRC"
+	echo '    fi' >> "\$TMPRC"
+	echo '}' >> "\$TMPRC"
+	
+	# Clean up temp file on exit
+	echo "rm -f \$TMPRC" >> "\$TMPRC"
+	
+	# Check if we're in sh mode (even if it's bash running as sh)
+	if [ "\$0" = "sh" ] || [ "\$0" = "-sh" ] || [ "\$(basename "\$SHELL")" = "sh" ]; then
+		ENV="\$TMPRC" exec /bin/sh -i
+	elif [ -n "\$BASH" ] && [ -x "\$BASH" ] && "\$BASH" --version 2>&1 | grep -q "GNU bash"; then
+		exec "\$BASH" --rcfile "\$TMPRC" -i
+	elif [ -x /bin/bash ] && /bin/bash --version 2>&1 | grep -q "GNU bash"; then
+		exec /bin/bash --rcfile "\$TMPRC" -i
+	elif [ -x /usr/bin/bash ] && /usr/bin/bash --version 2>&1 | grep -q "GNU bash"; then
+		exec /usr/bin/bash --rcfile "\$TMPRC" -i
+	else
+		# For sh, we need to use ENV variable
+		ENV="\$TMPRC" exec /bin/sh -i
+	fi
 }
 EOF
 )"
 fi
 INIT="$(
 cat <<EOF
-[ -n "\$BASH" ] && which base64 fold >/dev/null \
-&& eval 'decode() { printf %s "\$1" | fold -w 64 | base64 -d; }' \
-&& export BACKPACK="$BACKPACK" \
-&& eval "\$(decode "\$BACKPACK")" \
-&& extract_backpack
-[ -x "\$SHELL" ] && exec "\$SHELL" -l
-exec /bin/sh -i
+if which base64 >/dev/null 2>&1; then
+	# Define decode function that works in sh
+	decode() { printf %s "\$1" | base64 -d; }
+	export BACKPACK="$BACKPACK"
+	eval "\$(decode "\$BACKPACK")"
+	extract_backpack
+else
+	# No base64 available, just start a shell
+	[ -x "\$SHELL" ] && exec "\$SHELL" -l
+	exec /bin/sh -i
+fi
 EOF
 )"
 exec ssh -t "$1" "$INIT"

@@ -1,0 +1,88 @@
+# Dynamic hostname color function (POSIX compatible)
+get_hostname_color() {
+    hostname="$1"
+    # Expanded color palette - bright colors for black backgrounds
+    colors="31 32 33 34 35 36 37 91 92 93 94 95 96 97"
+    
+    # Improved hash function to reduce collisions
+    hash=0
+    i=0
+    while [ $i -lt ${#hostname} ]; do
+        char=$(printf '%s' "$hostname" | cut -c$((i+1)))
+        char_code=$(printf '%d' "'$char")
+        hash=$((hash + (char_code * (i + 1))))
+        hash=$((hash * 37 % 1000000))
+        i=$((i + 1))
+    done
+    
+    # Count colors
+    color_count=0
+    for c in $colors; do
+        color_count=$((color_count + 1))
+    done
+    
+    # Select color
+    color_index=$((hash % color_count + 1))
+    
+    # Extract nth color
+    i=1
+    for c in $colors; do
+        if [ $i -eq $color_index ]; then
+            echo "$c"
+            return
+        fi
+        i=$((i + 1))
+    done
+}
+
+# Get the color for current hostname
+HOSTNAME_COLOR=$(get_hostname_color "$(hostname)")
+
+# For sh shells, we need to export PS1
+if [ -z "$BASH_VERSION" ]; then
+    # For sh, we need to use single quotes and export
+    export PS1='${USER}@$(hostname):${PWD}$ '
+    # Try to add colors if the shell supports it
+    export PS1=$(printf '\033[32m${USER}\033[96m@\033[1;%sm$(hostname)\033[96m:\033[31m${PWD}\033[0m$ ' "$HOSTNAME_COLOR")
+else
+    PS1="\[\033[32m\]\u\[\033[96m\]@\[\033[1;${HOSTNAME_COLOR}m\]\h\[\033[96m\]:\[\033[31m\]\w\[\033[0m\]\$ "
+    
+    # If we're in an xterm, set the title too
+    case "$TERM" in
+    xterm*|rxvt*)
+        PS1="\[\e]0;\u@\h: \w\a\]$PS1"
+        ;;
+    esac
+    
+    # Key bindings for history search (bash only)
+    bind '"\e[A": history-search-backward' 2>/dev/null
+    bind '"\e[B": history-search-forward' 2>/dev/null
+fi
+
+# Make ssh use backpack - works as function in sh
+ssh() {
+    if [ -n "$BACKPACK" ] && which base64 >/dev/null 2>&1 && type backpack >/dev/null 2>&1; then
+        backpack "$@"
+    else
+        command ssh "$@"
+    fi
+}
+
+# Your existing aliases and functions
+alias l="ls -alah"
+
+# Only define bash-specific items if we're in bash
+if [ -n "$BASH_VERSION" ]; then
+    alias juu="perl -MJSON::PP -E 'local \$/; say JSON::PP->new->pretty(1)->encode(decode_json(<>));'"
+    
+    human() {
+        if [ $# -ne 0 ]; then
+            numfmt --to=iec "$@"
+        else
+            cat | numfmt --to=iec "$@"
+        fi
+    }
+fi
+
+# Terminal type
+TERM=xterm-256color
