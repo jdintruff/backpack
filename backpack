@@ -3,13 +3,28 @@ if [ ! -t 1 -o ! $# -eq 1 -o ! -f ~/.backpack -a -z "$BACKPACK" ]; then
 	exec ssh "$@"
 fi
 if [ -z "$BACKPACK" ]; then
-	encode() {
-		base64 | tr -d "\n"
-	}
+	if which base64 >/dev/null 2>&1; then
+		encode() {
+			base64 | tr -d "\n"
+		}
+	elif which python3 >/dev/null 2>&1; then
+		encode() {
+			python3 -m base64 | tr -d "\n"
+		}
+	elif which python >/dev/null 2>&1; then
+		encode() {
+			python -m base64 | tr -d "\n"
+		}
+	else
+		echo "Error: Neither base64 nor python available" >&2
+		exec ssh "$@"
+	fi
 	RC="$(encode < ~/.backpack)"
+	# Capture the script content now, while $0 still points to this script
+	SCRIPT_CONTENT="$(cat "$(realpath "$0")")"
 	FUNCTION="$(encode <<EOF
 backpack() {
-	$(cat "$(realpath "$0")")
+	$SCRIPT_CONTENT
 }
 export -f backpack 2>/dev/null || true
 EOF
@@ -63,6 +78,18 @@ cat <<EOF
 if which base64 >/dev/null 2>&1; then
 	# Define decode function that works in sh
 	decode() { printf %s "\$1" | base64 -d; }
+	export BACKPACK="$BACKPACK"
+	eval "\$(decode "\$BACKPACK")"
+	extract_backpack
+elif which python3 >/dev/null 2>&1; then
+	# Try Python 3 as fallback
+	decode() { printf %s "\$1" | python3 -m base64 -d; }
+	export BACKPACK="$BACKPACK"
+	eval "\$(decode "\$BACKPACK")"
+	extract_backpack
+elif which python >/dev/null 2>&1; then
+	# Try Python 2 as fallback
+	decode() { printf %s "\$1" | python -m base64 -d; }
 	export BACKPACK="$BACKPACK"
 	eval "\$(decode "\$BACKPACK")"
 	extract_backpack
