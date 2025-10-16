@@ -41,26 +41,18 @@ EOF_2
 	echo '    fi' >> "\$TMPRC"
 	echo '}' >> "\$TMPRC"
 	
-	# Clean up temp file on exit
-	echo "rm -f \$TMPRC" >> "\$TMPRC"
-	
-	# Check if we're in sh mode (even if it's bash running as sh)
+	# Check if we're in sh mode even if it's bash running as sh
 	if [ "\$0" = "sh" ] || [ "\$0" = "-sh" ] || [ "\$(basename "\$SHELL")" = "sh" ]; then
 		ENV="\$TMPRC" /bin/sh -i
-		rm -f "\$TMPRC"
 	elif [ -n "\$BASH" ] && [ -x "\$BASH" ] && "\$BASH" --version 2>&1 | grep -q "GNU bash"; then
 		"\$BASH" --rcfile "\$TMPRC" -i
-		rm -f "\$TMPRC"
 	elif [ -x /bin/bash ] && /bin/bash --version 2>&1 | grep -q "GNU bash"; then
 		/bin/bash --rcfile "\$TMPRC" -i
-		rm -f "\$TMPRC"
 	elif [ -x /usr/bin/bash ] && /usr/bin/bash --version 2>&1 | grep -q "GNU bash"; then
 		/usr/bin/bash --rcfile "\$TMPRC" -i
-		rm -f "\$TMPRC"
 	else
 		# For sh, we need to use ENV variable
 		ENV="\$TMPRC" /bin/sh -i
-		rm -f "\$TMPRC"
 	fi
 }
 EOF

@@ -9,6 +9,7 @@ It transfers contents of a local file ~/.backpack and itself to remote host, sou
 * won't create any files on remote hosts (even temporary)
 * tries to fallback to normal ssh when remote shell is not bash
 * **self-replication** allows you to use backpack again directly from remote host, in this case backpack will keep original local file as you go deaper from host to host.
+* **no cleanup** prevents issues when SSHing in circles (A→B→C→B)
 
 Example of ~/.backpack file:
 	
